@@ -1,7 +1,7 @@
 """
 Routines for Titanic Model generation and evaluation
 """
-from . import load_prep
+from titanic import load_prep
 
 import pandas as pd
 import numpy as np
