@@ -137,7 +137,7 @@ def eval_xgb_cv(
 ):
     """Perform cross-validation on xgboost classifier with pipeline preprocessing
 
-    this CV implementation is necessary for early stopping
+    this CV implementation is necessary for early stopping in xgboost
     """
 
     other_evals = {
