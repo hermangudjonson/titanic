@@ -9,9 +9,13 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.preprocessing import FunctionTransformer, StandardScaler
 from sklearn.pipeline import make_pipeline
 from sklearn.compose import make_column_transformer
+from titanic.utils import INPUT_DIR
+from pathlib import Path
 
 # raw data loading
-def raw_train():
+def raw_train(
+    input_dir: Path | str = INPUT_DIR
+):
     """load raw training data
     
     Returns
@@ -21,12 +25,16 @@ def raw_train():
     target_ds: `pd.Series`
         891 Survived (binary 0/1)
     """
-    train_df = pd.read_csv('data/raw/train.csv', index_col='PassengerId')
+    input_dir = Path(input_dir) if isinstance(input_dir, str) else input_dir
+
+    train_df = pd.read_csv(input_dir / 'train.csv', index_col='PassengerId')
     target_ds = train_df['Survived']
     train_df = train_df.drop(columns='Survived') # remove target from training features
     return train_df, target_ds
 
-def raw_test():
+def raw_test(
+    input_dir: Path | str = INPUT_DIR
+):
     """load raw test data
     
     Returns
@@ -34,13 +42,19 @@ def raw_test():
     test_df: `pd.DataFrame`
         418 x 10
     """
-    test_df = pd.read_csv('data/raw/test.csv', index_col='PassengerId')
+    input_dir = Path(input_dir) if isinstance(input_dir, str) else input_dir
+
+    test_df = pd.read_csv(INPUT_DIR / 'test.csv', index_col='PassengerId')
     return test_df
     
-def example_submission():
+def example_submission(
+    input_dir: Path | str = INPUT_DIR
+):
     """load example submission, gender prediction
     """
-    gender_ds = pd.read_csv('data/raw/gender_submission.csv', index_col='PassengerId').squeeze()
+    input_dir = Path(input_dir) if isinstance(input_dir, str) else input_dir
+
+    gender_ds = pd.read_csv(input_dir / 'gender_submission.csv', index_col='PassengerId').squeeze()
     return gender_ds
 
 
