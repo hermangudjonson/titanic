@@ -17,6 +17,7 @@ import xgboost as xgb
 import optuna
 
 import functools
+import warnings
 
 # n_estimators grid
 def n_estimators_objective(trial, X, y):
@@ -45,15 +46,15 @@ def n_estimators_objective(trial, X, y):
         ]
     )
     
-    eval_test = eval_df.loc[eval_df.eval_set == 'test',:].mean()
-    for k, v in eval_test.iteritems():
+    eval_test = eval_df.loc[eval_df.eval_set == 'test',:].mean(numeric_only=True)
+    for k, v in eval_test.items():
         trial.set_user_attr(k, v)
     return eval_test['logloss']
 
-def n_estimators_grid(n_trials=20):
+def n_estimators_grid(n_trials=20, outdir="."):
     """run optuna xgboost n_estimators grid 
     """
-    sql_file = f'sqlite:///{str(utils.WORKING_DIR / "data/hpo/xgb_n_estimators_grid.db")}'
+    sql_file = f'sqlite:///{str(utils.WORKING_DIR / outdir / "xgb_n_estimators_grid.db")}'
 
     study = optuna.create_study(
         storage=sql_file,
@@ -62,15 +63,17 @@ def n_estimators_grid(n_trials=20):
         pruner=optuna.pruners.NopPruner(), 
         direction="minimize", 
         sampler=optuna.samplers.GridSampler(
-            search_space={"n_estimators":list(np.geomspace(1, 1000, num=n_trials, dtype=int))}
+            search_space={"n_estimators":np.geomspace(1, 1000, num=n_trials, dtype=int).tolist()}
         )
     )
     
+    warnings.simplefilter('ignore') # to suppress multiple callback warning
     # pre-load data for trials
     raw_train_df, target_ds = load_prep.raw_train()
     study.optimize(
-        functools.partial(n_estimators_objective, raw_train_df, target_ds)
+        functools.partial(n_estimators_objective, X=raw_train_df, y=target_ds)
     )
+    warnings.resetwarnings()
     return study
 
 # max_depth grid
@@ -101,15 +104,15 @@ def max_depth_objective(trial, X, y):
         ]
     )
     
-    eval_test = eval_df.loc[eval_df.eval_set == 'test',:].mean()
-    for k, v in eval_test.iteritems():
+    eval_test = eval_df.loc[eval_df.eval_set == 'test',:].mean(numeric_only=True)
+    for k, v in eval_test.items():
         trial.set_user_attr(k, v)
     return eval_test['logloss']
 
-def max_depth_grid():
+def max_depth_grid(outdir="."):
     """run optuna xgboost max_depth grid 
     """
-    sql_file = f'sqlite:///{str(utils.WORKING_DIR / "data/hpo/xgb_max_depth_grid.db")}'
+    sql_file = f'sqlite:///{str(utils.WORKING_DIR / outdir / "xgb_max_depth_grid.db")}'
 
     study = optuna.create_study(
         storage=sql_file,
@@ -122,11 +125,13 @@ def max_depth_grid():
         )
     )
     
+    warnings.simplefilter('ignore') # to suppress multiple callback warning
     # pre-load data for trials
     raw_train_df, target_ds = load_prep.raw_train()
     study.optimize(
-        functools.partial(n_estimators_objective, raw_train_df, target_ds)
+        functools.partial(n_estimators_objective, X=raw_train_df, y=target_ds)
     )
+    warnings.resetwarnings()
     return study
 
 # stage0 (broad sweep)
@@ -164,12 +169,12 @@ def stage0_objective(trial, X, y):
         ]
     )
     
-    eval_test = eval_df.loc[eval_df.eval_set == 'test',:].mean()
-    for k, v in eval_test.iteritems():
+    eval_test = eval_df.loc[eval_df.eval_set == 'test',:].mean(numeric_only=True)
+    for k, v in eval_test.items():
         trial.set_user_attr(k, v)
     return eval_test['logloss']
 
-def stage0(prune=False, n_trials=100, timeout=3600):
+def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
     """run optuna xgboost stage0 hyperparameter optimization
     """
     if prune:
@@ -178,7 +183,7 @@ def stage0(prune=False, n_trials=100, timeout=3600):
     else:
         pruner = optuna.pruners.NopPruner()
     
-    sql_file = f'sqlite:///{str(utils.WORKING_DIR / "xgb_stage0.db")}'
+    sql_file = f'sqlite:///{str(utils.WORKING_DIR / outdir / "xgb_stage0.db")}'
 
     study = optuna.create_study(
         storage=sql_file,
@@ -189,11 +194,13 @@ def stage0(prune=False, n_trials=100, timeout=3600):
         sampler=optuna.samplers.TPESampler(),
     )
     
+    warnings.simplefilter('ignore') # to suppress multiple callback warning
     # pre-load data for trials
     raw_train_df, target_ds = load_prep.raw_train()
     study.optimize(
-        functools.partial(stage0_objective, raw_train_df, target_ds), 
+        functools.partial(stage0_objective, X=raw_train_df, y=target_ds), 
         n_trials=n_trials, 
         timeout=timeout
     )
+    warnings.resetwarnings()
     return study
