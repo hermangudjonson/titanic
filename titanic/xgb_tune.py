@@ -18,6 +18,7 @@ import optuna
 
 import functools
 import warnings
+import fire
 
 # n_estimators grid
 def n_estimators_objective(trial, X, y):
@@ -204,3 +205,6 @@ def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
     )
     warnings.resetwarnings()
     return study
+
+if __name__ == "__main__":
+    fire.Fire()
