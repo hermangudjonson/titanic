@@ -130,7 +130,7 @@ def max_depth_grid(outdir="."):
     # pre-load data for trials
     raw_train_df, target_ds = load_prep.raw_train()
     study.optimize(
-        functools.partial(n_estimators_objective, X=raw_train_df, y=target_ds)
+        functools.partial(max_depth_objective, X=raw_train_df, y=target_ds)
     )
     warnings.resetwarnings()
     return study
