@@ -26,4 +26,4 @@ dependencies:
   - pip
   - pip:
     - sweetviz
-    - -e /kaggle/input/titanic-test/titanic-main
+    - /kaggle/input/titanic-test/titanic-main
