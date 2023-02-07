@@ -1,0 +1,29 @@
+name: kaggle_v0
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python =3.10
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - notebook
+  - pytorch
+  - pyro-ppl
+  - torchvision
+  - torchaudio
+  - python-wget
+  - pandas-datareader
+  - scikit-learn >=1.2
+  - pandas-profiling =3.4
+  - py-xgboost
+  - optuna
+  - optuna-dashboard
+  - black
+  - flit
+  - kaggle
+  - fire
+  - pip
+  - pip:
+    - sweetviz
+    - -e /kaggle/input/titanic-test/titanic-main
