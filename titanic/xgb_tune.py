@@ -180,7 +180,7 @@ def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
     """
     if prune:
         pruner = optuna.pruners.MedianPruner(
-            n_startup_trials=5, n_warmup_steps=30, interval_steps=10, n_min_trials=5)
+            n_startup_trials=5, n_warmup_steps=200, interval_steps=50, n_min_trials=5)
     else:
         pruner = optuna.pruners.NopPruner()
     
