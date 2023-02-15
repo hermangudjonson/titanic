@@ -116,7 +116,7 @@ def clf_pipeline(
 
 
 def get_imputed_df(X, y):
-    """utility function to retrieve imputed data with categoricals in tact (as after preprocessing)"""
+    """utility function to retrieve imputed data with categoricals intact (as after preprocessing)"""
     pipe = make_pipeline(load_prep.preprocess_pipeline(), get_encoder(), get_imputer())
     X_imputed = pipe.fit_transform(X, y)
     X_pp = pipe[0].transform(X)
