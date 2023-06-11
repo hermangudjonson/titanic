@@ -23,6 +23,7 @@ from sklearn.compose import make_column_transformer, make_column_selector
 from sklearn.linear_model import BayesianRidge
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 import xgboost as xgb
+import lightgbm as lgbm
 from sklearn.model_selection import StratifiedKFold
 import sklearn.metrics as skm
 
@@ -78,9 +79,14 @@ def get_imputer(strategy="iterative_RF"):
     return imputer
 
 
-def get_classifier(strategy="xgboost", params={}):
+def get_classifier(strategy="xgboost", params=None):
+    """return classifier to be used in classification pipeline"""
+    params = params if params is not None else {}
+
     if strategy == "xgboost":
         clf = xgb.XGBClassifier(**params)
+    elif strategy == "lightgbm":
+        clf = lgbm.LGBMClassifier(**params)
     elif strategy == "passthrough":
         clf = "passthrough"
     return clf
@@ -90,7 +96,7 @@ def clf_pipeline(
     encoder_strategy="onehot", 
     imputer_strategy="iterative_BR", 
     clf_strategy="xgboost",
-    clf_params={}
+    clf_params=None
 ):
     """generate complete classification pipeline
 
@@ -103,6 +109,8 @@ def clf_pipeline(
     take configuration parameters as input to produce pipeline variations
     for cross-validation and investigation
     """
+    clf_params = clf_params if clf_params is not None else {}
+
     pipe = Pipeline(
         [
             ("preprocessor", load_prep.preprocess_pipeline()),
@@ -131,14 +139,88 @@ def get_imputed_df(X, y):
 def eval_xgb_cv(
     X, 
     y, 
-    params={}, 
-    cv=StratifiedKFold(n_splits=5),
+    params=None, 
+    cv=None,
     callbacks=None
 ):
     """Perform cross-validation on xgboost classifier with pipeline preprocessing
 
     this CV implementation is necessary for early stopping in xgboost
+
+    Parameters
+    ----------
+        cv: defaults to Stratified 5 fold if not provided
     """
+    params = params if params is not None else {}
+    cv = cv if cv is not None else StratifiedKFold(n_splits=5)
+
+    other_evals = {
+        'accuracy': skm.accuracy_score,
+        'f1': skm.f1_score,
+        'precision': skm.precision_score,
+        'recall': skm.recall_score,
+        'roc_auc': skm.roc_auc_score,
+        'average_precision': skm.average_precision_score,
+        'cohen_k': skm.cohen_kappa_score,
+        'mcc': skm.matthews_corrcoef
+    }
+
+    eval_df = pd.DataFrame()
+
+    for fold, (train_idx, test_idx) in enumerate(cv.split(X, y)):
+        X_fold, y_fold = X.iloc[train_idx].copy(), y.iloc[train_idx]
+        Xt_fold, yt_fold = X.iloc[test_idx].copy(), y.iloc[test_idx]
+
+        pre_pipe = clf_pipeline(clf_strategy='passthrough')
+
+        X_pre = pre_pipe.fit_transform(X_fold, y_fold)
+        Xt_pre = pre_pipe.transform(Xt_fold)
+
+        clf = xgb.XGBClassifier(**params, callbacks=callbacks)
+        clf.fit(X_pre, y_fold, eval_set=[(X_pre, y_fold), (Xt_pre, yt_fold)], verbose=False)
+
+        best_ntree = clf.best_ntree_limit # going to be deprecated
+        best_idx = clf.best_iteration
+        
+        # training series
+        train_eval = pd.DataFrame(clf.evals_result()['validation_0']).loc[[best_idx],:]
+        y_pred = clf.predict(X_pre)
+        for s, f in other_evals.items():
+            train_eval[s] = f(y_fold, y_pred)
+        train_eval['eval_set'] = 'train'
+        # test series
+        test_eval = pd.DataFrame(clf.evals_result()['validation_1']).loc[[best_idx],:]
+        yt_pred = clf.predict(Xt_pre)
+        for s, f in other_evals.items():
+            test_eval[s] = f(yt_fold, yt_pred)
+        test_eval['eval_set'] = 'test'
+
+        fold_eval = pd.concat([train_eval, test_eval], axis=0, ignore_index=True)
+        fold_eval['fold'] = fold
+        fold_eval['best_ntree'] = best_ntree
+
+        eval_df = pd.concat([eval_df, fold_eval], ignore_index=True)
+    
+    return eval_df
+
+
+def eval_lgbm_cv(
+    X, 
+    y, 
+    params=None, 
+    cv=None,
+    callbacks=None
+):
+    """Perform cross-validation on lightgbm classifier with pipeline preprocessing
+
+    this CV implementation is necessary for early stopping in lightgbm
+
+    Parameters
+    ----------
+        cv: defaults to Stratified 5 fold if not provided
+    """
+    params = params if params is not None else {}
+    cv = cv if cv is not None else StratifiedKFold(n_splits=5)
 
     other_evals = {
         'accuracy': skm.accuracy_score,
