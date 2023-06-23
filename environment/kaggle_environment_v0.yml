@@ -17,6 +17,7 @@ dependencies:
   - scikit-learn >=1.2
   - pandas-profiling =3.4
   - py-xgboost
+  - lightgbm
   - optuna
   - optuna-dashboard
   - black

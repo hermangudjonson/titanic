@@ -3,10 +3,11 @@ XGBoost hyperparameter optimization with optuna
 
 optuna experiments defined by objectives (search space), study creation and runs
 
-no tuning (just CV eval)
-n_estimators sweep (no early stopping), for timing info
-max_depth sweep
-stage0 broad sweep 
+tuning progression:
+ - no tuning (just CV eval)
+ - n_estimators sweep (no early stopping), for timing info
+ - max_depth sweep
+ - stage0 broad sweep 
 """
 
 from titanic import load_prep, model, utils
