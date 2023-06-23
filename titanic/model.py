@@ -50,7 +50,7 @@ def get_encoder(strategy="onehot"):
     return col_encoder
 
 
-def get_imputer(strategy="iterative_RF"):
+def get_imputer(strategy="iterative_BR"):
     """supports three imputer strategies of increasing complexity"""
     if strategy == "simple_median":
         imputer = SimpleImputer(strategy="median", add_indicator=True)
@@ -244,20 +244,27 @@ def eval_lgbm_cv(
         X_pre = pre_pipe.fit_transform(X_fold, y_fold)
         Xt_pre = pre_pipe.transform(Xt_fold)
 
-        clf = xgb.XGBClassifier(**params, callbacks=callbacks)
-        clf.fit(X_pre, y_fold, eval_set=[(X_pre, y_fold), (Xt_pre, yt_fold)], verbose=False)
+        clf = lgbm.LGBMClassifier(**params, )
+        clf.fit(
+            X_pre, 
+            y_fold, 
+            eval_set=[(Xt_pre, yt_fold), (X_pre, y_fold)],
+            eval_names=['validation', 'training'],
+            eval_metric=None, # defaulting to training objective
+            callbacks=callbacks
+        )
 
-        best_ntree = clf.best_ntree_limit
-        best_idx = clf.best_iteration
-        
+        best_ntree = clf.best_iteration_ if clf.best_iteration_ else clf.n_estimators
+        best_idx = best_ntree - 1
+
         # training series
-        train_eval = pd.DataFrame(clf.evals_result()['validation_0']).loc[[best_idx],:]
+        train_eval = pd.DataFrame(clf.evals_result_['training']).loc[[best_idx],:]
         y_pred = clf.predict(X_pre)
         for s, f in other_evals.items():
             train_eval[s] = f(y_fold, y_pred)
         train_eval['eval_set'] = 'train'
         # test series
-        test_eval = pd.DataFrame(clf.evals_result()['validation_1']).loc[[best_idx],:]
+        test_eval = pd.DataFrame(clf.evals_result_['validation']).loc[[best_idx],:]
         yt_pred = clf.predict(Xt_pre)
         for s, f in other_evals.items():
             test_eval[s] = f(yt_fold, yt_pred)
