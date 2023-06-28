@@ -74,6 +74,61 @@ def n_estimators_grid(n_trials=20, outdir="."):
     warnings.resetwarnings()
     return study
 
+def early_stopping_objective(trial, X, y):
+    """objective for early stopping grid
+    """
+    lgbm_params = {
+        "objective": 'binary',
+        "n_estimators": 10000,
+        "learning_rate": trial.suggest_float('learning_rate', 1e-5, 1.0, log=True)
+    }
+
+    sfold = RepeatedStratifiedKFold(n_splits=5, n_repeats=2, random_state=1234)
+    # this is approximately 1e-3 decay in 10k steps
+    # learning_rates = list(lgbm_params['learning_rate'] * np.float_power(1 - 7e-4, np.arange(lgbm_params['n_estimators'])))
+    
+    eval_df = model.eval_lgbm_cv(
+        X,
+        y,
+        params=lgbm_params, 
+        cv=sfold,
+        callbacks=[
+            optuna.integration.LightGBMPruningCallback(trial, 'binary_logloss', valid_name='validation'),
+            lgbm.early_stopping(20, first_metric_only=True)
+            # lgbm.reset_parameter(learning_rate=learning_rates)
+        ]
+    )
+    
+    eval_test = eval_df.loc[eval_df.eval_set == 'test',:].mean(numeric_only=True)
+    for k, v in eval_test.items():
+        trial.set_user_attr(k, v)
+    return eval_test['binary_logloss']
+
+def early_stopping_grid(n_trials=21, outdir="."):
+    """run optuna lightgbm early stopping grid
+    """
+    sql_file = f'sqlite:///{str(utils.WORKING_DIR / outdir / "lgbm_early_stopping_grid.db")}'
+
+    study = optuna.create_study(
+        storage=sql_file,
+        load_if_exists=False,
+        study_name='lgbm_early_stopping',
+        pruner=optuna.pruners.NopPruner(), 
+        direction="minimize", 
+        sampler=optuna.samplers.GridSampler(
+            search_space={"learning_rate":np.geomspace(1e-5, 1.0, num=n_trials).tolist()}
+        )
+    )
+    
+    warnings.simplefilter('ignore') # to suppress multiple callback warning
+    # pre-load data for trials
+    raw_train_df, target_ds = load_prep.raw_train()
+    study.optimize(
+        functools.partial(early_stopping_objective, X=raw_train_df, y=target_ds)
+    )
+    warnings.resetwarnings()
+    return study
+
 def stage0_objective(trial, X, y):
     """
     """
