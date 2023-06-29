@@ -190,7 +190,7 @@ def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
     # pre-load data for trials
     raw_train_df, target_ds = load_prep.raw_train()
     study.optimize(
-        functools.partial(early_stopping_objective, X=raw_train_df, y=target_ds),
+        functools.partial(stage0_objective, X=raw_train_df, y=target_ds),
         n_trials=n_trials,
         timeout=timeout
     )
