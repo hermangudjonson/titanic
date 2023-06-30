@@ -134,8 +134,8 @@ def stage0_objective(trial, X, y):
     """
     lgbm_params = {
         "objective": 'binary',
-        "n_estimators": 10000,
-        "learning_rate": 1e-3, # expect around 2k trials 2-3min
+        "n_estimators": 2000, # reduce this for timing
+        "learning_rate": 5e-2, # expect around 2k trials 2-3min, 5k seemed to take 5 hrs?
         "num_leaves": trial.suggest_int("num_leaves", 7, 4095),
         "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 5, 100),
         "lambda_l1": trial.suggest_float("lambda_l1", 1e-8, 10, log=True),
