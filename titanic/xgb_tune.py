@@ -142,7 +142,7 @@ def stage0_objective(trial, X, y):
     """
     xgb_params = dict(
         objective='binary:logistic',
-        n_estimators=10000,
+        n_estimators=2000,
         learning_rate=trial.suggest_float('learning_rate', 1e-8, 1.0, log=True),
         alpha=trial.suggest_float('alpha', 1e-8, 1.0, log=True),
         max_depth=trial.suggest_int("max_depth", 1, 15),
