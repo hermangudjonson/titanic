@@ -244,7 +244,7 @@ def eval_lgbm_cv(
         X_pre = pre_pipe.fit_transform(X_fold, y_fold)
         Xt_pre = pre_pipe.transform(Xt_fold)
 
-        clf = lgbm.LGBMClassifier(**params, )
+        clf = lgbm.LGBMClassifier(**params)
         clf.fit(
             X_pre, 
             y_fold, 
