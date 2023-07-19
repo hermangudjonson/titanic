@@ -79,6 +79,48 @@ def get_imputer(strategy="iterative_BR"):
     return imputer
 
 
+class LGBMProxy(lgbm.LGBMClassifier):
+    """LightGBM wrapper that conforms to sklearn interface
+    
+    specifically move callbacks and validation data to initialization
+    rather than needing to be passed during the call to fit itself
+
+    Parameters
+    ----------
+    params: dict, optional
+        parameters to be passed to LGBMClassifier initialization
+    callbacks: list, optional
+        lightgbm fit callback functions
+    validation: tuple (X, y), optional
+        validation data, required to use early stopping
+    """
+    def __init__(self, callbacks=None, validation=None, **params):
+        super().__init__(**params)
+        self.callbacks = callbacks
+        self.validation = validation
+
+    @classmethod
+    def _get_param_names(cls):
+        return sorted(set(['callbacks', 'validation'] + lgbm.LGBMClassifier._get_param_names()))
+
+    def fit(self, X, y):
+        if self.validation is not None:
+            eval_set = [self.validation, (X, y)]
+            eval_names = ['validation', 'training']
+        else:
+            eval_set = None
+            eval_names = None
+        super().fit(
+            X, 
+            y, 
+            eval_set=eval_set,
+            eval_names=eval_names,
+            eval_metric=None, # defaulting to training objective
+            callbacks=self.callbacks
+        )
+        return self
+
+
 def get_classifier(strategy="xgboost", params=None):
     """return classifier to be used in classification pipeline"""
     params = params if params is not None else {}
