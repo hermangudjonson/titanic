@@ -24,6 +24,7 @@ dependencies:
   - flit
   - kaggle
   - fire
+  - cloudpickle
   - pip
   - pip:
     - sweetviz

@@ -220,7 +220,6 @@ def cv_with_validation(estimator, X, y, cv, callbacks=None):
     return results dictionary with one key per callback
     """
     cv = check_cv(cv, y, classifier=is_classifier(estimator))
-    n_splits = cv.get_n_splits(X, y)
     callbacks = callbacks if callbacks is not None else {}
 
     result = {k: {} for k in callbacks.keys()}

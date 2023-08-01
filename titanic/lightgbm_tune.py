@@ -11,9 +11,11 @@ tuning progression:
 from titanic import load_prep, model, utils
 
 import numpy as np
-from sklearn.model_selection import RepeatedStratifiedKFold
+import pandas as pd
+from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
 import lightgbm as lgbm
 import optuna
+import cloudpickle
 
 import functools
 import warnings
@@ -196,6 +198,64 @@ def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
     )
     warnings.resetwarnings()
     return study
+
+
+def _cv_results_df(cv_results: dict):
+    """collate eval test results from cv_with_validation return
+    """
+    folds = cv_results['eval_test'].keys()
+    cv_results_df = pd.concat(
+        [
+            pd.concat(cv_results['lgbm_metrics'].values(), keys=folds, ignore_index=True),
+            pd.concat(cv_results['eval_test'].values(), keys=folds, ignore_index=True)
+        ], 
+        axis=1
+    )
+    return cv_results_df
+
+
+def cv_best_trial(outdir=None):
+    """Fit across CV folds with best LightGBM hyperparameters.
+    """
+    lgbm_params = {
+        "objective": 'binary',
+        "n_estimators": 10000, # extended for final fit
+        "learning_rate": 5e-1, # expect around 2k trials 2-3min, 5k seemed to take 5 hrs?
+        "callbacks": [lgbm.early_stopping(20, first_metric_only=True)]
+    }
+    # best trial params
+    trial_params = {
+        'bagging_fraction': 0.6846162556761146,
+        'bagging_freq': 4,
+        'feature_fraction': 0.6486652591422358,
+        'lambda_l1': 0.17370643342030245,
+        'lambda_l2': 1.5596407749195192e-06,
+        'min_data_in_leaf': 17,
+        'num_leaves': 747
+    }
+    lgbm_params = lgbm_params | trial_params
+
+    raw_train_df, target_ds = load_prep.raw_train()
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+
+    clf_pipe = model.clf_pipeline(clf_strategy='lightgbm', clf_params=lgbm_params)
+    cv_results = model.cv_with_validation(
+        clf_pipe, 
+        raw_train_df, 
+        target_ds, 
+        cv, 
+        callbacks = model.common_cv_callbacks() | {'lgbm_metrics': model._lgbm_fit_metrics}
+    )
+    cv_results_df = _cv_results_df(cv_results)
+
+    if outdir is not None:
+        # pickle cv results
+        with open(utils.WORKING_DIR / outdir / "lgbm_best_cv.pkl", 'wb') as f:
+            cloudpickle.dump(cv_results, f)
+        cv_results_df.to_csv(utils.WORKING_DIR / outdir / "lgbm_best_eval_test.csv")
+        
+    return cv_results
+
 
 if __name__ == "__main__":
     fire.Fire()
