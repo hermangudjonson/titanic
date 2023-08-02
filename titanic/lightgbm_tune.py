@@ -214,13 +214,13 @@ def _cv_results_df(cv_results: dict):
     return cv_results_df
 
 
-def cv_best_trial(outdir=None):
+def cv_best_trial(learning_rate=5e-1, outdir=None):
     """Fit across CV folds with best LightGBM hyperparameters.
     """
     lgbm_params = {
         "objective": 'binary',
         "n_estimators": 10000, # extended for final fit
-        "learning_rate": 5e-3, # expect around 2k trials 2-3min, 5k seemed to take 5 hrs?
+        "learning_rate": learning_rate, # expect around 2k trials 2-3min, 5k seemed to take 5 hrs?
         "callbacks": [lgbm.early_stopping(20, first_metric_only=True)]
     }
     # best trial params
