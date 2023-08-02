@@ -14,10 +14,10 @@ dependencies:
   - torchaudio
   - python-wget
   - pandas-datareader
-  - scikit-learn >=1.2
+  - scikit-learn =1.2.2
   - pandas-profiling =3.4
-  - py-xgboost
-  - lightgbm
+  - py-xgboost =1.7.1
+  - lightgbm =3.3.5
   - optuna
   - optuna-dashboard
   - black
