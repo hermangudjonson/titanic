@@ -220,7 +220,7 @@ def cv_best_trial(outdir=None):
     lgbm_params = {
         "objective": 'binary',
         "n_estimators": 10000, # extended for final fit
-        "learning_rate": 5e-1, # expect around 2k trials 2-3min, 5k seemed to take 5 hrs?
+        "learning_rate": 5e-3, # expect around 2k trials 2-3min, 5k seemed to take 5 hrs?
         "callbacks": [lgbm.early_stopping(20, first_metric_only=True)]
     }
     # best trial params
@@ -244,7 +244,7 @@ def cv_best_trial(outdir=None):
         raw_train_df, 
         target_ds, 
         cv, 
-        callbacks = model.common_cv_callbacks() | {'lgbm_metrics': model._lgbm_fit_metrics}
+        callbacks = model.common_cv_callbacks() | {'lgbm_metrics': model.lgbm_fit_metrics}
     )
     cv_results_df = _cv_results_df(cv_results)
 

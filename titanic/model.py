@@ -286,7 +286,7 @@ def _predict_proba_test(*, estimator, test_data, **kwargs):
     return estimator.predict_proba(X)
 
 
-def _lgbm_fit_metrics(*, estimator, **kwargs):
+def lgbm_fit_metrics(*, estimator, **kwargs):
     """Return fit metrics for fitted LightGBM model
     """
     clf = estimator['clf']
