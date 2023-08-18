@@ -233,7 +233,11 @@ def cv_with_validation(estimator, X, y, cv, callbacks=None):
 
         start_time = time()
 
-        fit_with_validation(fold_estimator, X_train, y_train, X_valid, y_valid)
+        if 'validation' in fold_estimator.get_params():
+            # pass validation data if validation param exists 
+            fit_with_validation(fold_estimator, X_train, y_train, X_valid, y_valid)
+        else:
+            fit_with_validation(fold_estimator, X_train, y_train)
 
         fit_time = time() - start_time
         result["train_time"][fold] = fit_time
