@@ -24,10 +24,13 @@ from sklearn.model_selection import check_cv
 from sklearn.utils.metaestimators import _safe_split
 
 # estimators
-from sklearn.linear_model import BayesianRidge
+from sklearn.linear_model import BayesianRidge, LogisticRegressionCV
+from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
 import xgboost as xgb
 import lightgbm as lgbm
+
+# model selection
 from sklearn.model_selection import StratifiedKFold
 import sklearn.metrics as skm
 
@@ -136,8 +139,16 @@ def get_classifier(strategy="xgboost", params=None):
         clf = xgb.XGBClassifier(**params)
     elif strategy == "lightgbm":
         clf = LGBMProxy(**params)
+    elif strategy == 'logistic':
+        clf = LogisticRegressionCV(**params)
+    elif strategy == 'neighbors':
+        clf = KNeighborsClassifier(**params)
     elif strategy == "passthrough":
         clf = "passthrough"
+    else:
+        raise ValueError(
+            "not a valid classifier strategy"
+        )
     return clf
 
 
@@ -254,7 +265,9 @@ def cv_with_validation(estimator, X, y, cv, callbacks=None):
 
 
 def _score_classifier(clf, X, y, eval_name=None):
-    """Score fitted classifier for common metrics
+    """Score fitted classifier for common metrics. 
+
+    Applies metrics that compare true targets to predicted targets.
     """
     other_evals = {
         "accuracy": skm.accuracy_score,

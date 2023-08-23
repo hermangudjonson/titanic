@@ -1,16 +1,15 @@
 """
 Ensemble estimators -- voting and stacking
 """
-from titanic import model
-
+import cloudpickle
 import numpy as np
 
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
+from sklearn.linear_model import LogisticRegressionCV
 from sklearn.model_selection import check_cv
 from sklearn.utils.validation import check_is_fitted
-from sklearn.linear_model import LogisticRegressionCV
 
-import cloudpickle
+from titanic import model
 
 
 class StackingClassifier(BaseEstimator, ClassifierMixin):
@@ -21,37 +20,30 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
     estimators : dict[str, str | Classifier]
         either configured classifier to be fit or file with cv_results to be loaded
     """
-    def __init__(
-            self, 
-            estimators, 
-            final_estimator = None,
-            *, 
-            cv = None,
-            passthrough = False
-        ):
+
+    def __init__(self, estimators, final_estimator=None, *, cv=None, passthrough=False):
         self.estimators = estimators
         self.final_estimator = final_estimator
         self.cv = cv
         self.passthrough = passthrough
 
     def _load_estimators(self):
-        """Load pickled pre-fit estimators (otherwise None)
-        """
+        """Load pickled pre-fit estimators (otherwise None)"""
         est_dict = {}
         for name, est in self.estimators.items():
             if isinstance(est, str):
-                with open(est, 'rb') as f:
+                with open(est, "rb") as f:
                     est_dict[name] = cloudpickle.load(f)
             else:
                 est_dict[name] = None
         return est_dict
-    
+
     def _validate_cv(self, est_dict, cv, X, y):
-        """Ensure pre-loaded cv is consistent with cv parameter.
-        """
+        """Ensure pre-loaded cv splits are consistent with cv parameter."""
         preloaded = []
         for _, cvr in est_dict.items():
-            preloaded.append(list(cvr['indices'].values()))
+            if cvr:
+                preloaded.append(list(cvr["indices"].values()))
 
         if not preloaded:
             cv = check_cv(cv, y, classifier=True)
@@ -64,9 +56,9 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
         splits = cv.split(X, y)
 
         for est_indices in preloaded:
-            if not all([s1 == s2 for s1, s2 in zip(est_indices, splits)]):
+            if not all([all(t1 == t2) and all(v1 == v2) for (t1, v1), (t2, v2) in zip(est_indices, splits)]):
                 raise ValueError("CV indices from preloaded estimators do not match.")
-            
+
         # we may also consider validating that test splits form a full partition
         return cv
 
@@ -77,12 +69,14 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
         Return predict_proba predictions in original data order with first column removed
         Returns a 2D numpy array
         """
-        test_indices = np.concatenate([test for _, test in cv_results['indices'].values()])
+        test_indices = np.concatenate(
+            [test for _, test in cv_results["indices"].values()]
+        )
         inv_test_indices = np.empty(len(test_indices), dtype=int)
         inv_test_indices[test_indices] = np.arange(len(test_indices))
 
-        predictions = np.concatenate(list(cv_results['predict_proba_test'].values()))
-        return predictions[inv_test_indices, 1:] # shape (N_X, N_classes - 1)
+        predictions = np.concatenate(list(cv_results["predict_proba_test"].values()))
+        return predictions[inv_test_indices, 1:]  # shape (N_X, N_classes - 1)
 
     def _concatenate_predictions(self, X, predictions):
         """Collate training data X_meta from first-stage predictions for metalearner.
@@ -113,20 +107,19 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
         cv = self._validate_cv(self.estimators_, self.cv, X, y)
 
         # fit first stage
-        for name, cvr in self.estimators_:
+        for name, cvr in self.estimators_.items():
             if cvr is None:
                 self.estimators_[name] = model.cv_with_validation(
-                    clone(self.estimators[name]), 
-                    X, 
-                    y, 
-                    cv, 
-                    callbacks=model.common_cv_callbacks()
+                    clone(self.estimators[name]),
+                    X,
+                    y,
+                    cv,
+                    callbacks=model.common_cv_callbacks(),
                 )
 
         # aggregate out of fold predictions for metalearner
         X_meta = self._concatenate_predictions(
-            X,
-            [self._out_of_fold(cvr) for cvr in self.estimators_.values()]
+            X, [self._out_of_fold(cvr) for cvr in self.estimators_.values()]
         )
 
         # fit second stage
@@ -144,8 +137,8 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
         predictions = []
         for cvr in self.estimators_.values():
             fold_predictions = np.stack(
-                [fold_est.predict_proba(X) for fold_est in cvr['estimator'].values()], 
-                axis=0
+                [fold_est.predict_proba(X) for fold_est in cvr["estimator"].values()],
+                axis=0,
             )
             # remove first column of predict_proba results
             predictions.append(fold_predictions.mean(axis=0)[:, 1:])
