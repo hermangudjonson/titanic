@@ -13,9 +13,11 @@ tuning progression:
 from titanic import load_prep, model, utils
 
 import numpy as np
-from sklearn.model_selection import RepeatedStratifiedKFold
+import pandas as pd
+from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
 import xgboost as xgb
 import optuna
+import cloudpickle
 
 import functools
 import warnings
@@ -206,6 +208,68 @@ def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
     )
     warnings.resetwarnings()
     return study
+
+
+def _cv_results_df(cv_results: dict):
+    """collate eval test results from cv_with_validation return
+    """
+    folds = cv_results['eval_test'].keys()
+    cv_results_df = pd.concat(
+        [
+            pd.concat(cv_results['xgb_metrics'].values(), keys=folds, ignore_index=True),
+            pd.concat(cv_results['eval_test'].values(), keys=folds, ignore_index=True)
+        ], 
+        axis=1
+    )
+    return cv_results_df
+
+
+def cv_best_trial(outdir=None):
+    """Fit across CV folds with best XGBoost hyperparameters.
+    """
+    xgb_params = {
+        "objective": 'binary:logistic',
+        "n_estimators": 10000, # extended for final fit
+        "early_stopping_rounds": 20,
+        "eval_metric": ['error','auc','aucpr','logloss'],
+    }
+    # best trial params
+    trial_params = {
+        'alpha': 5.916193064283585e-05,
+        'colsample_bytree': 0.7584098690627883,
+        'gamma': 0.27453904448426225,
+        'grow_policy': 'depthwise',
+        'lambda': 1.8840455465191083e-07,
+        'learning_rate': 0.11250187473760402,
+        'max_depth': 3,
+        'subsample': 0.7561880158336687
+    }
+    xgb_params = xgb_params | trial_params
+    # this is approximately 1e-3 decay in 10k steps
+    learning_rates = list(xgb_params['learning_rate'] * np.float_power(1 - 7e-4, np.arange(xgb_params['n_estimators'])))
+    xgb_params['callbacks'] = [xgb.callback.LearningRateScheduler(learning_rates)]
+
+    raw_train_df, target_ds = load_prep.raw_train()
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+
+    clf_pipe = model.clf_pipeline(clf_strategy='xgboost', clf_params=xgb_params)
+    cv_results = model.cv_with_validation(
+        clf_pipe, 
+        raw_train_df, 
+        target_ds, 
+        cv, 
+        callbacks = model.common_cv_callbacks() | {'xgb_metrics': model.xgb_fit_metrics}
+    )
+    cv_results_df = _cv_results_df(cv_results)
+
+    if outdir is not None:
+        # pickle cv results
+        with open(utils.WORKING_DIR / outdir / "xgb_best_cv.pkl", 'wb') as f:
+            cloudpickle.dump(cv_results, f)
+        cv_results_df.to_csv(utils.WORKING_DIR / outdir / "xgb_best_eval_test.csv")
+        
+    return cv_results
+
 
 if __name__ == "__main__":
     fire.Fire()

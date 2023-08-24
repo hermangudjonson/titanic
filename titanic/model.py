@@ -131,24 +131,54 @@ class LGBMProxy(lgbm.LGBMClassifier):
         return self
 
 
+class XGBProxy(xgb.XGBClassifier):
+    """LightGBM wrapper that conforms to sklearn interface
+
+    specifically move callbacks and validation data to initialization
+    rather than needing to be passed during the call to fit itself
+
+    Parameters
+    ----------
+    validation : tuple (X, y), optional
+        validation data, required to use early stopping
+    **params : optional
+        parameters to be passed to XGBClassifier initialization
+    """
+
+    def __init__(self, validation=None, **params):
+        super().__init__(**params)
+        self.validation = validation
+
+    @classmethod
+    def _get_param_names(cls):
+        return sorted(set(["validation"] + xgb.XGBClassifier._get_param_names()))
+
+    def fit(self, X, y):
+        if self.validation is not None:
+            # training data, validation data (used for early stopping)
+            eval_set = [(X, y), self.validation]
+        else:
+            eval_set = None
+        super().fit(X, y, eval_set=eval_set, verbose=False)
+        return self
+
+
 def get_classifier(strategy="xgboost", params=None):
     """return classifier to be used in classification pipeline"""
     params = params if params is not None else {}
 
     if strategy == "xgboost":
-        clf = xgb.XGBClassifier(**params)
+        clf = XGBProxy(**params)
     elif strategy == "lightgbm":
         clf = LGBMProxy(**params)
-    elif strategy == 'logistic':
+    elif strategy == "logistic":
         clf = LogisticRegressionCV(**params)
-    elif strategy == 'neighbors':
+    elif strategy == "neighbors":
         clf = KNeighborsClassifier(**params)
     elif strategy == "passthrough":
         clf = "passthrough"
     else:
-        raise ValueError(
-            "not a valid classifier strategy"
-        )
+        raise ValueError("not a valid classifier strategy")
     return clf
 
 
@@ -238,14 +268,19 @@ def cv_with_validation(estimator, X, y, cv, callbacks=None):
 
     for fold, (train_idx, test_idx) in enumerate(cv.split(X, y)):
         fold_estimator = clone(estimator)
+        # form a dummy pipeline to make this compatible with single estimators
+        if not isinstance(estimator, Pipeline):
+            fold_estimator = make_pipeline('pass', fold_estimator)
 
         X_train, y_train = _safe_split(fold_estimator, X, y, train_idx)
-        X_valid, y_valid = _safe_split(fold_estimator, X, y, test_idx, train_indices=train_idx)
+        X_valid, y_valid = _safe_split(
+            fold_estimator, X, y, test_idx, train_indices=train_idx
+        )
 
         start_time = time()
 
-        if 'validation' in fold_estimator.get_params():
-            # pass validation data if validation param exists 
+        if "validation" in fold_estimator[-1].get_params():
+            # pass validation data if validation param exists in final pipeline step
             fit_with_validation(fold_estimator, X_train, y_train, X_valid, y_valid)
         else:
             fit_with_validation(fold_estimator, X_train, y_train)
@@ -253,19 +288,23 @@ def cv_with_validation(estimator, X, y, cv, callbacks=None):
         fit_time = time() - start_time
         result["train_time"][fold] = fit_time
 
+        if not isinstance(estimator, Pipeline):
+            # revert back to single estimator for evaluation
+            fold_estimator = fold_estimator[-1]
+
         for k, func in callbacks.items():
             result[k][fold] = func(
-                fold=fold, 
-                estimator=fold_estimator, 
-                indices=(train_idx, test_idx), 
-                train_data=(X_train, y_train), 
-                test_data=(X_valid, y_valid)
+                fold=fold,
+                estimator=fold_estimator,
+                indices=(train_idx, test_idx),
+                train_data=(X_train, y_train),
+                test_data=(X_valid, y_valid),
             )
     return result
 
 
 def _score_classifier(clf, X, y, eval_name=None):
-    """Score fitted classifier for common metrics. 
+    """Score fitted classifier for common metrics.
 
     Applies metrics that compare true targets to predicted targets.
     """
@@ -283,19 +322,19 @@ def _score_classifier(clf, X, y, eval_name=None):
     y_pred = clf.predict(X)
     eval_vals = {s: f(y_pred, y) for s, f in other_evals.items()}
     if eval_name is not None:
-        eval_vals['eval_set'] = eval_name
-    
+        eval_vals["eval_set"] = eval_name
+
     return pd.DataFrame(pd.Series(eval_vals)).T
 
 
 def _score_train(*, estimator, train_data, **kwargs):
     X, y = train_data
-    return _score_classifier(estimator, X, y, eval_name='train')
+    return _score_classifier(estimator, X, y, eval_name="train")
 
 
 def _score_test(*, estimator, test_data, **kwargs):
     X, y = test_data
-    return _score_classifier(estimator, X, y, eval_name='test')
+    return _score_classifier(estimator, X, y, eval_name="test")
 
 
 def _predict_proba_test(*, estimator, test_data, **kwargs):
@@ -304,18 +343,40 @@ def _predict_proba_test(*, estimator, test_data, **kwargs):
 
 
 def lgbm_fit_metrics(*, estimator, **kwargs):
-    """Return fit metrics for fitted LightGBM model
-    """
-    clf = estimator['clf']
+    """Return fit metrics for fitted LightGBM model"""
+    clf = estimator["clf"]
     best_ntree = clf.best_iteration_ if clf.best_iteration_ else clf.n_estimators
     best_idx = best_ntree - 1
 
     lgbm_evals = {
-        **{'train_' + k: v[best_idx] for k, v in clf.evals_result_['training'].items()},
-        **{'test_' + k: v[best_idx] for k, v in clf.evals_result_['validation'].items()},
-        **{'best_ntree': best_ntree}
+        **{"train_" + k: v[best_idx] for k, v in clf.evals_result_["training"].items()},
+        **{
+            "test_" + k: v[best_idx] for k, v in clf.evals_result_["validation"].items()
+        },
+        **{"best_ntree": best_ntree},
     }
     return pd.DataFrame(pd.Series(lgbm_evals)).T
+
+
+def xgb_fit_metrics(*, estimator, **kwargs):
+    """Return fit metrics for fitted XGBoost model"""
+    clf = estimator["clf"]
+    best_idx = clf.best_iteration
+    best_ntree = best_idx + 1
+
+    xgb_evals = {
+        **{
+            "train_" + k: v[best_idx]
+            for k, v in clf.evals_result_["validation_0"].items()
+        },
+        **{
+            "test_" + k: v[best_idx]
+            for k, v in clf.evals_result_["validation_1"].items()
+        },
+        **{"best_ntree": best_ntree},
+    }
+    return pd.DataFrame(pd.Series(xgb_evals)).T
+
 
 def common_cv_callbacks():
     """Generates dictionary of common CV callback functions for cv_with_validation.
@@ -329,12 +390,12 @@ def common_cv_callbacks():
         - test target data
     """
     callbacks = {
-        'estimator': lambda *, estimator, **kw: estimator, 
-        'indices': lambda *, indices, **kw: indices,
-        'eval_train': _score_train,
-        'eval_test': _score_test,
-        'predict_proba_test': _predict_proba_test, 
-        'y_test': lambda *, test_data, **kw: test_data[1]
+        "estimator": lambda *, estimator, **kw: estimator,
+        "indices": lambda *, indices, **kw: indices,
+        "eval_train": _score_train,
+        "eval_test": _score_test,
+        "predict_proba_test": _predict_proba_test,
+        "y_test": lambda *, test_data, **kw: test_data[1],
     }
     return callbacks
 
