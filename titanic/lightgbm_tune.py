@@ -53,6 +53,7 @@ def n_estimators_objective(trial, X, y):
         trial.set_user_attr(k, v)
     return eval_test['binary_logloss']
 
+
 def n_estimators_grid(n_trials=20, outdir="."):
     """run optuna lightgbm n_estimators grid
     """
@@ -77,6 +78,7 @@ def n_estimators_grid(n_trials=20, outdir="."):
     )
     warnings.resetwarnings()
     return study
+
 
 def early_stopping_objective(trial, X, y):
     """objective for early stopping grid
@@ -108,6 +110,7 @@ def early_stopping_objective(trial, X, y):
         trial.set_user_attr(k, v)
     return eval_test['binary_logloss']
 
+
 def early_stopping_grid(n_trials=21, outdir="."):
     """run optuna lightgbm early stopping grid
     """
@@ -132,6 +135,7 @@ def early_stopping_grid(n_trials=21, outdir="."):
     )
     warnings.resetwarnings()
     return study
+
 
 def stage0_objective(trial, X, y):
     """objective for stage0 broad parameter sweep
@@ -169,6 +173,7 @@ def stage0_objective(trial, X, y):
     for k, v in eval_test.items():
         trial.set_user_attr(k, v)
     return eval_test['binary_logloss']
+
 
 def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
     """run optuna lightgbm stage0 hyperparamter optimization
