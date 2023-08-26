@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import scipy
 
-from sklearn.base import BaseEstimator, TransformerMixin, is_classifier, clone
+from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, is_classifier, clone
 from sklearn.preprocessing import (
     FunctionTransformer,
     StandardScaler,
@@ -27,8 +27,9 @@ from sklearn.utils.metaestimators import _safe_split
 from sklearn.linear_model import BayesianRidge, LogisticRegressionCV
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-import xgboost as xgb
 import lightgbm as lgbm
+import xgboost as xgb
+import catboost as ctb
 
 # model selection
 from sklearn.model_selection import StratifiedKFold
@@ -132,7 +133,7 @@ class LGBMProxy(lgbm.LGBMClassifier):
 
 
 class XGBProxy(xgb.XGBClassifier):
-    """LightGBM wrapper that conforms to sklearn interface
+    """XGBoost wrapper that conforms to sklearn interface
 
     specifically move callbacks and validation data to initialization
     rather than needing to be passed during the call to fit itself
@@ -163,6 +164,57 @@ class XGBProxy(xgb.XGBClassifier):
         return self
 
 
+class CTBProxy(BaseEstimator, ClassifierMixin):
+    """Catboost wrapper that conforms to sklearn interface
+
+    specifically move callbacks and validation data to initialization
+    rather than needing to be passed during the call to fit itself.
+    Note catboost tries to JSON serialize all parameters (fails for dataframe)
+
+    Parameters
+    ----------
+    callbacks : list, optional
+        lightgbm fit callback functions
+    validation : tuple (X, y), optional
+        validation data, required to use early stopping
+    **params : optional
+        parameters to be passed to CatBoostClassifier initialization
+    """
+
+    def __init__(self, callbacks=None, validation=None, **params):
+        self.callbacks = callbacks
+        self.validation = validation
+        # catboost classifier
+        self.estimator_ = ctb.CatBoostClassifier(**params)
+
+    def get_params(self, deep=True):
+        return self.estimator_.get_params(deep) | {
+            'callbacks': self.callbacks, 
+            'validation': self.validation
+        }
+
+    def set_params(self, **params):
+        if 'callbacks' in params:
+            self.callbacks = params.pop('callbacks')
+        if 'validation' in params:
+            self.validation = params.pop('validation')
+        self.estimator_.set_params(**params)
+
+    def fit(self, X, y):
+        self.estimator_.fit(
+            X,
+            y,
+            eval_set=self.validation, 
+            callbacks=self.callbacks,
+        )
+        return self
+
+    def __getattr__(self, name):
+        """dispatch other methods to estimator
+        """
+        return getattr(self.estimator_, name)
+
+
 def get_classifier(strategy="xgboost", params=None):
     """return classifier to be used in classification pipeline"""
     params = params if params is not None else {}
@@ -171,6 +223,8 @@ def get_classifier(strategy="xgboost", params=None):
         clf = XGBProxy(**params)
     elif strategy == "lightgbm":
         clf = LGBMProxy(**params)
+    elif strategy == 'catboost':
+        clf = CTBProxy(**params)
     elif strategy == "logistic":
         clf = LogisticRegressionCV(**params)
     elif strategy == "neighbors":
@@ -376,6 +430,26 @@ def xgb_fit_metrics(*, estimator, **kwargs):
         **{"best_ntree": best_ntree},
     }
     return pd.DataFrame(pd.Series(xgb_evals)).T
+
+
+def ctb_fit_metrics(*, estimator, **kwargs):
+    """Return fit metrics for fitted XGBoost model"""
+    clf = estimator["clf"]
+    best_idx = clf.best_iteration_ if clf.best_iteration_ is not None else clf.tree_count_ - 1
+    best_ntree = best_idx + 1
+
+    ctb_evals = {
+        **{
+            "train_" + k: v[best_idx]
+            for k, v in clf.evals_result_["learn"].items()
+        },
+        **{
+            "test_" + k: v[best_idx]
+            for k, v in clf.evals_result_["validation"].items()
+        },
+        **{"best_ntree": best_ntree},
+    }
+    return pd.DataFrame(pd.Series(ctb_evals)).T
 
 
 def common_cv_callbacks():

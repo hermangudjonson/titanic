@@ -6,6 +6,8 @@ optuna experiments defined by objectives (search space), study creation and runs
 tuning progression:
  - no tuning (just CV eval)
  - n_estimators sweep (no early stopping), for timing info
+ - learning_rate sweep to evaluate early stopping points
+ - broad parameter sweep
 """
 
 from titanic import load_prep, model, utils
@@ -118,7 +120,7 @@ def early_stopping_grid(n_trials=21, outdir="."):
         pruner=optuna.pruners.NopPruner(), 
         direction="minimize", 
         sampler=optuna.samplers.GridSampler(
-            search_space={"learning_rate":np.geomspace(1e-5, 1.0, num=n_trials).tolist()}
+            search_space={"learning_rate": np.geomspace(1e-5, 1.0, num=n_trials).tolist()}
         )
     )
     

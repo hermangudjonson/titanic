@@ -18,6 +18,7 @@ dependencies:
   - pandas-profiling =3.4
   - py-xgboost =1.7.1
   - lightgbm =3.3.5
+  - catboost =1.1.1
   - optuna
   - optuna-dashboard
   - black
