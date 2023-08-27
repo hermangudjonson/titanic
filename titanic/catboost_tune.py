@@ -93,7 +93,7 @@ def n_estimators_grid(n_trials=20, outdir="."):
 
 
 def early_stopping_objective(trial, X, y):
-    """objective for n_estimators grid
+    """objective for early_stopping grid
     """
     ctb_params = {
         "objective": "Logloss", 
@@ -122,7 +122,7 @@ def early_stopping_objective(trial, X, y):
 
 
 def early_stopping_grid(n_trials=21, outdir="."):
-    """run optuna lightgbm early stopping grid
+    """run optuna catboost early stopping grid
     """
     sql_file = f'sqlite:///{str(utils.WORKING_DIR / outdir / "ctb_early_stopping_grid.db")}'
 
@@ -142,6 +142,75 @@ def early_stopping_grid(n_trials=21, outdir="."):
     raw_train_df, target_ds = load_prep.raw_train()
     study.optimize(
         functools.partial(early_stopping_objective, X=raw_train_df, y=target_ds)
+    )
+    warnings.resetwarnings()
+    return study
+
+
+def stage0_objective(trial, X, y):
+    """objective for stage0 broad parameter sweep
+    """
+    ctb_params = {
+        "objective": "Logloss", 
+        "n_estimators": 2000, 
+        "allow_writing_files": False, 
+        "learning_rate": 5e-2, 
+        "early_stopping_rounds": 20, 
+        "l2_leaf_reg": trial.suggest_float("l2_leaf_reg", 1e-8, 10, log=True),
+        "depth": trial.suggest_int("depth", 2, 12),
+        "bagging_temperature": trial.suggest_float("bagging_temperature", 0, 10),
+        "random_strength": trial.suggest_float("l2_leaf_reg", 1e-1, 10, log=True),
+        "colsample_bylevel": trial.suggest_float("colsample_bylevel", 0.4, 1.0),
+        "callbacks": [
+            optuna.integration.CatBoostPruningCallback(trial, 'Logloss')
+        ]
+    }
+
+    sfold = RepeatedStratifiedKFold(n_splits=5, n_repeats=2, random_state=1234)
+
+    clf_pipe = model.clf_pipeline(clf_strategy='catboost', clf_params=ctb_params)
+    cv_results = model.cv_with_validation(
+        clf_pipe, 
+        X, 
+        y, 
+        sfold, 
+        callbacks = model.common_cv_callbacks() | {'ctb_metrics': model.ctb_fit_metrics}
+    )
+    cv_results_df = _cv_results_df(cv_results)
+
+    eval_test = cv_results_df.mean(numeric_only=True)
+    for k, v in eval_test.items():
+        trial.set_user_attr(k, v)
+    return eval_test['test_Logloss']
+
+
+def stage0(prune=False, n_trials=100, timeout=3600, outdir="."):
+    """run optuna catboost stage0 hyperparamter optimization
+    """
+    if prune:
+        pruner = optuna.pruners.MedianPruner(
+            n_startup_trials=5, n_warmup_steps=200, interval_steps=50, n_min_trials=5)
+    else:
+        pruner = optuna.pruners.NopPruner()
+    
+    sql_file = f'sqlite:///{str(utils.WORKING_DIR / outdir / "ctb_stage0.db")}'
+
+    study = optuna.create_study(
+        storage=sql_file,
+        load_if_exists=True,
+        study_name='ctb_stage0',
+        pruner=pruner, 
+        direction="minimize", 
+        sampler=optuna.samplers.TPESampler()
+    )
+    
+    warnings.simplefilter('ignore') # to suppress multiple callback warning
+    # pre-load data for trials
+    raw_train_df, target_ds = load_prep.raw_train()
+    study.optimize(
+        functools.partial(stage0_objective, X=raw_train_df, y=target_ds),
+        n_trials=n_trials,
+        timeout=timeout
     )
     warnings.resetwarnings()
     return study
