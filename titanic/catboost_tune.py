@@ -220,11 +220,19 @@ def cv_best_trial(learning_rate=5e-1, outdir=None):
     """Fit across CV folds with best Catboost hyperparameters.
     """
     ctb_params = {
-
+        "objective": "Logloss", 
+        "n_estimators": 10000, 
+        "allow_writing_files": False, 
+        "learning_rate": learning_rate, 
+        "early_stopping_rounds": 20
     }
     # best trial params
     trial_params = {
-
+        'l2_leaf_reg': 0.49489875249045634,
+        'depth': 6,
+        'bagging_temperature': 7.633062771302952,
+        'random_strength': 2.9260975279154997,
+        'colsample_bylevel': 0.6161258209638515
     }
     ctb_params = ctb_params | trial_params
 
