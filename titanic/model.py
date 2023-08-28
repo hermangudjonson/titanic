@@ -225,6 +225,29 @@ def get_classifier(strategy="xgboost", params=None):
         clf = LGBMProxy(**params)
     elif strategy == 'catboost':
         clf = CTBProxy(**params)
+    elif strategy == 'randomforest':
+        # using lightgbm, with rf defaults
+        rf_params = {
+            'boosting': 'random_forest', 
+            'learning_rate': 1.0, 
+            'bagging_freq': 1, 
+            'bagging_fraction': 0.8, 
+            'feature_fraction_bynode': 0.8
+        }
+        params = rf_params | params
+        clf = LGBMProxy(**params)
+    elif strategy == 'extrarandomforest':
+        # using lightgbm, with rf defaults
+        erf_params = {
+            'boosting': 'random_forest', 
+            'extra_trees': True, 
+            'learning_rate': 1.0, 
+            'bagging_freq': 1, 
+            'bagging_fraction': 0.8, 
+            'feature_fraction_bynode': 0.8
+        }
+        params = erf_params | params
+        clf = LGBMProxy(**params)
     elif strategy == "logistic":
         clf = LogisticRegressionCV(**params)
     elif strategy == "neighbors":
