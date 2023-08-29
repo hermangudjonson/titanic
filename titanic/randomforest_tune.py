@@ -98,5 +98,83 @@ def stage0(n_trials=100, timeout=3600, outdir=".", extra_trees=False):
     return study
 
 
+def randomforest_cv_best_trial(outdir=None):
+    """Fit across CV folds with best random forest hyperparameters.
+    """
+    lgbm_params = {
+        "objective": 'binary', 
+        "verbosity": -1, 
+        "n_estimators": 2000, 
+    }
+    # best trial params
+    trial_params = {
+        'num_leaves': 2959,
+        'min_data_in_leaf': 2,
+        'lambda_l1': 0.08662698761500258,
+        'lambda_l2': 3.453994865265475e-08,
+        'bagging_fraction': 0.63757547256296,
+        'feature_fraction': 0.4998297272820985
+    }
+    lgbm_params = lgbm_params | trial_params
+
+    raw_train_df, target_ds = load_prep.raw_train()
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+
+    clf_pipe = model.clf_pipeline(clf_strategy='randomforest', clf_params=lgbm_params)
+    cv_results = model.cv_with_validation(
+        clf_pipe, 
+        raw_train_df, 
+        target_ds, 
+        cv, 
+        callbacks = model.common_cv_callbacks() | {'lgbm_metrics': model.lgbm_fit_metrics}
+    )
+    cv_results_df = _cv_results_df(cv_results)
+
+    if outdir is not None:
+        # pickle cv results
+        with open(utils.WORKING_DIR / outdir / "rf_best_cv.pkl", 'wb') as f:
+            cloudpickle.dump(cv_results, f)
+        cv_results_df.to_csv(utils.WORKING_DIR / outdir / "rf_best_eval_test.csv")
+
+
+def extrarandomforest_cv_best_trial(outdir=None):
+    """Fit across CV folds with best extra random forest hyperparameters.
+    """
+    lgbm_params = {
+        "objective": 'binary', 
+        "verbosity": -1, 
+        "n_estimators": 2000, 
+    }
+    # best trial params
+    trial_params = {
+        'num_leaves': 1397,
+        'min_data_in_leaf': 2,
+        'lambda_l1': 3.688237028287448e-08,
+        'lambda_l2': 7.485766060310619e-08,
+        'bagging_fraction': 0.970303935745195,
+        'feature_fraction': 0.6517606356559024
+    }
+    lgbm_params = lgbm_params | trial_params
+
+    raw_train_df, target_ds = load_prep.raw_train()
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+
+    clf_pipe = model.clf_pipeline(clf_strategy='randomforest', clf_params=lgbm_params)
+    cv_results = model.cv_with_validation(
+        clf_pipe, 
+        raw_train_df, 
+        target_ds, 
+        cv, 
+        callbacks = model.common_cv_callbacks() | {'lgbm_metrics': model.lgbm_fit_metrics}
+    )
+    cv_results_df = _cv_results_df(cv_results)
+
+    if outdir is not None:
+        # pickle cv results
+        with open(utils.WORKING_DIR / outdir / "erf_best_cv.pkl", 'wb') as f:
+            cloudpickle.dump(cv_results, f)
+        cv_results_df.to_csv(utils.WORKING_DIR / outdir / "erf_best_eval_test.csv")
+
+
 if __name__ == "__main__":
     fire.Fire()
