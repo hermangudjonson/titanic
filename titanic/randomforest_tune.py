@@ -39,7 +39,8 @@ def stage0_objective(trial, X, y, extra_trees=False):
     """objective for stage0 broad parameter sweep
     """
     lgbm_params = {
-        "objective": 'binary',
+        "objective": 'binary', 
+        "verbosity": -1, 
         "n_estimators": 2000, 
         "num_leaves": trial.suggest_int("num_leaves", 2, 4095),
         "min_data_in_leaf": trial.suggest_int("min_data_in_leaf", 2, 100),
@@ -65,7 +66,7 @@ def stage0_objective(trial, X, y, extra_trees=False):
     eval_test = cv_results_df.mean(numeric_only=True)
     for k, v in eval_test.items():
         trial.set_user_attr(k, v)
-    return eval_test['test_Logloss']
+    return eval_test['test_binary_logloss']
 
 
 def stage0(n_trials=100, timeout=3600, outdir=".", extra_trees=False):
