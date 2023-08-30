@@ -1,39 +1,34 @@
 """
 Routines for Titanic Model generation and evaluation
 """
-from titanic import load_prep
-
 from time import time
 
-import pandas as pd
+import catboost as ctb
+import lightgbm as lgbm
 import numpy as np
+import pandas as pd
 import scipy
-
-from sklearn.base import BaseEstimator, ClassifierMixin, TransformerMixin, is_classifier, clone
-from sklearn.preprocessing import (
-    FunctionTransformer,
-    StandardScaler,
-    OneHotEncoder,
-    OrdinalEncoder,
-)
+import sklearn.metrics as skm
+import xgboost as xgb
+from optuna.distributions import FloatDistribution
+from optuna.integration.sklearn import OptunaSearchCV
+from sklearn.base import (BaseEstimator, ClassifierMixin, TransformerMixin,
+                          clone, is_classifier)
+from sklearn.compose import make_column_selector, make_column_transformer
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.experimental import enable_iterative_imputer
-from sklearn.impute import SimpleImputer, IterativeImputer
-from sklearn.pipeline import make_pipeline, Pipeline
-from sklearn.compose import make_column_transformer, make_column_selector
-from sklearn.model_selection import check_cv
-from sklearn.utils.metaestimators import _safe_split
-
+from sklearn.impute import IterativeImputer, SimpleImputer
 # estimators
 from sklearn.linear_model import BayesianRidge, LogisticRegressionCV
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-import lightgbm as lgbm
-import xgboost as xgb
-import catboost as ctb
-
 # model selection
-from sklearn.model_selection import StratifiedKFold
-import sklearn.metrics as skm
+from sklearn.model_selection import StratifiedKFold, check_cv
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neural_network import MLPClassifier
+from sklearn.pipeline import Pipeline, make_pipeline
+from sklearn.preprocessing import (FunctionTransformer, OneHotEncoder,
+                                   OrdinalEncoder, StandardScaler)
+from sklearn.utils.metaestimators import _safe_split
+from titanic import load_prep
 
 
 def get_encoder(strategy="onehot"):
@@ -189,29 +184,28 @@ class CTBProxy(BaseEstimator, ClassifierMixin):
 
     def get_params(self, deep=True):
         return self.estimator_.get_params(deep) | {
-            'callbacks': self.callbacks, 
-            'validation': self.validation
+            "callbacks": self.callbacks,
+            "validation": self.validation,
         }
 
     def set_params(self, **params):
-        if 'callbacks' in params:
-            self.callbacks = params.pop('callbacks')
-        if 'validation' in params:
-            self.validation = params.pop('validation')
+        if "callbacks" in params:
+            self.callbacks = params.pop("callbacks")
+        if "validation" in params:
+            self.validation = params.pop("validation")
         self.estimator_.set_params(**params)
 
     def fit(self, X, y):
         self.estimator_.fit(
             X,
             y,
-            eval_set=self.validation, 
+            eval_set=self.validation,
             callbacks=self.callbacks,
         )
         return self
 
     def __getattr__(self, name):
-        """dispatch other methods to estimator
-        """
+        """dispatch other methods to estimator"""
         return getattr(self.estimator_, name)
 
 
@@ -223,31 +217,45 @@ def get_classifier(strategy="xgboost", params=None):
         clf = XGBProxy(**params)
     elif strategy == "lightgbm":
         clf = LGBMProxy(**params)
-    elif strategy == 'catboost':
+    elif strategy == "catboost":
         clf = CTBProxy(**params)
-    elif strategy == 'randomforest':
+    elif strategy == "randomforest":
         # using lightgbm, with rf defaults
         rf_params = {
-            'boosting': 'random_forest', 
-            'learning_rate': 1.0, 
-            'bagging_freq': 1, 
-            'bagging_fraction': 0.8, 
-            'feature_fraction_bynode': 0.8
+            "boosting": "random_forest",
+            "learning_rate": 1.0,
+            "bagging_freq": 1,
+            "bagging_fraction": 0.8,
+            "feature_fraction_bynode": 0.8,
         }
         params = rf_params | params
         clf = LGBMProxy(**params)
-    elif strategy == 'extrarandomforest':
+    elif strategy == "extrarandomforest":
         # using lightgbm, with rf defaults
         erf_params = {
-            'boosting': 'random_forest', 
-            'extra_trees': True, 
-            'learning_rate': 1.0, 
-            'bagging_freq': 1, 
-            'bagging_fraction': 0.8, 
-            'feature_fraction_bynode': 0.8
+            "boosting": "random_forest",
+            "extra_trees": True,
+            "learning_rate": 1.0,
+            "bagging_freq": 1,
+            "bagging_fraction": 0.8,
+            "feature_fraction_bynode": 0.8,
         }
         params = erf_params | params
         clf = LGBMProxy(**params)
+    elif strategy == 'neuralnet':
+        # MLP with wrapped hyperparam search
+        param_distributions = {
+            # sampled params
+            "alpha": FloatDistribution(1e-5, 1e2, log=True),
+            "learning_rate_init": FloatDistribution(1e-5, 1, log=True),
+        }
+        clf = OptunaSearchCV(
+            MLPClassifier(**params),
+            param_distributions,
+            cv=5,
+            scoring='neg_log_loss', 
+            n_trials=50
+        )
     elif strategy == "logistic":
         clf = LogisticRegressionCV(**params)
     elif strategy == "neighbors":
@@ -347,7 +355,7 @@ def cv_with_validation(estimator, X, y, cv, callbacks=None):
         fold_estimator = clone(estimator)
         # form a dummy pipeline to make this compatible with single estimators
         if not isinstance(estimator, Pipeline):
-            fold_estimator = make_pipeline('pass', fold_estimator)
+            fold_estimator = make_pipeline("pass", fold_estimator)
 
         X_train, y_train = _safe_split(fold_estimator, X, y, train_idx)
         X_valid, y_valid = _safe_split(
@@ -458,17 +466,15 @@ def xgb_fit_metrics(*, estimator, **kwargs):
 def ctb_fit_metrics(*, estimator, **kwargs):
     """Return fit metrics for fitted XGBoost model"""
     clf = estimator["clf"]
-    best_idx = clf.best_iteration_ if clf.best_iteration_ is not None else clf.tree_count_ - 1
+    best_idx = (
+        clf.best_iteration_ if clf.best_iteration_ is not None else clf.tree_count_ - 1
+    )
     best_ntree = best_idx + 1
 
     ctb_evals = {
+        **{"train_" + k: v[best_idx] for k, v in clf.evals_result_["learn"].items()},
         **{
-            "train_" + k: v[best_idx]
-            for k, v in clf.evals_result_["learn"].items()
-        },
-        **{
-            "test_" + k: v[best_idx]
-            for k, v in clf.evals_result_["validation"].items()
+            "test_" + k: v[best_idx] for k, v in clf.evals_result_["validation"].items()
         },
         **{"best_ntree": best_ntree},
     }
