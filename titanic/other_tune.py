@@ -30,7 +30,7 @@ def _cv_results_df(cv_results: dict):
     return cv_results_df
 
 
-def mlp_best(outdir=None):
+def mlp_cv_best(outdir=None):
     """Fit and save MLPClassifier cross-validation
     """
     nn_params = {
