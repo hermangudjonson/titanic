@@ -168,7 +168,36 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
         return self.final_estimator_.decision_function(X_meta)
 
 
-def get_stacker():
+def get_reduced_stacker():
+    """Configure reduced stacker model with pretrained estimators
+
+    trying just gbms and random forest
+    """
+    PRE_DIR = Path('/kaggle/input/pretrained') if utils.ON_KAGGLE else utils.WORKING_DIR / "data/hpo"
+
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+    # define models
+    lightgbm_pipe = str(PRE_DIR / 'lgbm_best_cv.pkl')
+    xgboost_pipe = str(PRE_DIR / 'xgb_best_cv.pkl')
+    catboost_pipe = str(PRE_DIR / 'ctb_best_cv.pkl')
+    randomforest_pipe = str(PRE_DIR / 'rf_best_cv.pkl')
+    extrarandomforest_pipe = str(PRE_DIR / 'erf_best_cv.pkl')
+
+    stacker = StackingClassifier(
+        {
+            'lightgbm': lightgbm_pipe,
+            'xgboost': xgboost_pipe,
+            'catboost': catboost_pipe,
+            'randomforest': randomforest_pipe,
+            'extrarandomforest': extrarandomforest_pipe,
+        }, 
+        final_estimator=LogisticRegressionCV(),
+        cv=cv
+    )
+    return stacker
+
+
+def get_full_stacker():
     """Configure full stacker model with pretrained estimators
 
     should only need to fit svm, logistic, neighbors and naivebayes
@@ -214,11 +243,19 @@ def get_stacker():
     return stacker
 
 
+def get_stacker(strategy="reduced"):
+    if strategy == "full":
+        stacker = get_full_stacker()
+    elif strategy == "reduced":
+        stacker = get_reduced_stacker()
+    return stacker
+
+
 def _cvr_eval_df(cvr):
     return pd.concat(cvr['eval_test'].values(), ignore_index=True)
 
 
-def submit():
+def submit(strategy="reduced"):
     """Train full stacker model and generate submission
 
     also record eval results for all component models on validation folds
@@ -227,7 +264,7 @@ def submit():
     X, y = load_prep.raw_train()
     X_test = load_prep.raw_test()
 
-    stacker_clf = get_stacker()
+    stacker_clf = get_stacker(strategy=strategy)
     stacker_clf.fit(X, y)
     
     # record validation evals
