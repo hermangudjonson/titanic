@@ -1,15 +1,17 @@
 """
 Ensemble estimators -- voting and stacking
 """
-import cloudpickle
-import numpy as np
+from pathlib import Path
 
+import cloudpickle
+import fire
+import numpy as np
+import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.linear_model import LogisticRegressionCV
-from sklearn.model_selection import check_cv
+from sklearn.model_selection import StratifiedKFold, check_cv
 from sklearn.utils.validation import check_is_fitted
-
-from titanic import model
+from titanic import load_prep, model, utils
 
 
 class StackingClassifier(BaseEstimator, ClassifierMixin):
@@ -164,3 +166,82 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
 
         X_meta = self._transform(X)
         return self.final_estimator_.decision_function(X_meta)
+
+
+def get_stacker():
+    """Configure full stacker model with pretrained estimators
+
+    should only need to fit svm, logistic, neighbors and naivebayes
+    """
+    PRE_DIR = Path('/kaggle/input/pretrained') if utils.ON_KAGGLE else utils.WORKING_DIR / "data/hpo"
+
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
+    # define models
+    lightgbm_pipe = str(PRE_DIR / 'lgbm_best_cv.pkl')
+    xgboost_pipe = str(PRE_DIR / 'xgb_best_cv.pkl')
+    catboost_pipe = str(PRE_DIR / 'ctb_best_cv.pkl')
+    randomforest_pipe = str(PRE_DIR / 'rf_best_cv.pkl')
+    extrarandomforest_pipe = str(PRE_DIR / 'erf_best_cv.pkl')
+    mlp_pipe = str(PRE_DIR / 'mlp_best_cv.pkl')
+    svm_pipe = model.clf_pipeline(
+        clf_strategy='svm', 
+        clf_params={
+            "kernel": "rbf",
+            "probability": True,
+            "class_weight": "balanced"
+        }
+    )
+    logistic_pipe = model.clf_pipeline(clf_strategy='logistic', clf_params={'max_iter':1000})
+    neighbors_pipe = model.clf_pipeline(clf_strategy='neighbors', clf_params={'n_neighbors':10})
+    naivebayes_pipe = model.clf_pipeline(clf_strategy='naivebayes')
+
+    stacker = StackingClassifier(
+        {
+            'lightgbm': lightgbm_pipe,
+            'xgboost': xgboost_pipe,
+            'catboost': catboost_pipe,
+            'randomforest': randomforest_pipe,
+            'extrarandomforest': extrarandomforest_pipe,
+            'mlp': mlp_pipe,
+            'svm': svm_pipe,
+            'logistic': logistic_pipe, 
+            'neighbors': neighbors_pipe,
+            'naivebayes': naivebayes_pipe,
+        }, 
+        final_estimator=LogisticRegressionCV(),
+        cv=cv
+    )
+    return stacker
+
+
+def _cvr_eval_df(cvr):
+    return pd.concat(cvr['eval_test'].values(), ignore_index=True)
+
+
+def submit():
+    """Train full stacker model and generate submission
+
+    also record eval results for all component models on validation folds
+    """
+    # load test data
+    X, y = load_prep.raw_train()
+    X_test = load_prep.raw_test()
+
+    stacker_clf = get_stacker()
+    stacker_clf.fit(X, y)
+    
+    # record validation evals
+    evals = (
+        {
+            k: _cvr_eval_df(stacker_clf.estimators_[k]).mean()
+            for k in stacker_clf.estimators_.keys()
+        }
+    )
+    pd.concat(evals, axis=1).to_csv("stacker_estimators_evals.csv")
+
+    stacker_predict = pd.Series(stacker_clf.predict(X_test), name='Survived', index=X_test.index)
+    stacker_predict.to_csv("stacker_predict.csv")
+
+
+if __name__ == "__main__":
+    fire.Fire()
