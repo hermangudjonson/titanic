@@ -22,11 +22,13 @@ from sklearn.impute import IterativeImputer, SimpleImputer
 from sklearn.linear_model import BayesianRidge, LogisticRegressionCV
 # model selection
 from sklearn.model_selection import StratifiedKFold, check_cv
+from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline, make_pipeline
 from sklearn.preprocessing import (FunctionTransformer, OneHotEncoder,
                                    OrdinalEncoder, StandardScaler)
+from sklearn.svm import NuSVC
 from sklearn.utils.metaestimators import _safe_split
 from titanic import load_prep
 
@@ -256,10 +258,25 @@ def get_classifier(strategy="xgboost", params=None):
             scoring='neg_log_loss', 
             n_trials=50
         )
+    elif strategy == "svm":
+        param_distributions = {
+            # sampled params
+            "nu": FloatDistribution(1e-3, 0.7),
+            "gamma": FloatDistribution(1e-3, 1e3, log=True)
+        }
+        clf = OptunaSearchCV(
+            NuSVC(**params),
+            param_distributions,
+            cv=5,
+            scoring="neg_log_loss",
+            n_trials=20
+        )
     elif strategy == "logistic":
         clf = LogisticRegressionCV(**params)
     elif strategy == "neighbors":
         clf = KNeighborsClassifier(**params)
+    elif strategy == "naivebayes":
+        clf = GaussianNB(**params)
     elif strategy == "passthrough":
         clf = "passthrough"
     else:

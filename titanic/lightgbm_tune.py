@@ -10,18 +10,17 @@ tuning progression:
  - broad parameter sweep
 """
 
-from titanic import load_prep, model, utils
-
-import numpy as np
-import pandas as pd
-from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
-import lightgbm as lgbm
-import optuna
-import cloudpickle
-
 import functools
 import warnings
+
+import cloudpickle
 import fire
+import lightgbm as lgbm
+import numpy as np
+import optuna
+import pandas as pd
+from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
+from titanic import load_prep, model, utils
 
 
 def n_estimators_objective(trial, X, y):
@@ -262,6 +261,30 @@ def cv_best_trial(learning_rate=5e-1, outdir=None):
         cv_results_df.to_csv(utils.WORKING_DIR / outdir / "lgbm_best_eval_test.csv")
         
     return cv_results
+
+
+def _cvr_predict(cv_result, X):
+    """Average predict_proba from fold estimators and make predictions 
+    """
+    fold_predictions = np.stack(
+        [fold_est.predict_proba(X) for fold_est in cv_result["estimator"].values()],
+        axis=0,
+    )
+    # average predict_proba results
+    return fold_predictions.mean(axis=0).argmax(axis=1)
+    
+
+def submit():
+    """Prepare and submit pretrained lightgbm predictions
+    """
+    # load pretrained lightgbm
+    with open('/kaggle/input/pretrained/lgbm_best_cv.pkl', 'rb') as f:
+        lgbm_cvr = cloudpickle.load(f)
+    # load test data
+    X = load_prep.raw_test()
+
+    lgbm_predict = pd.Series(_cvr_predict(lgbm_cvr, X), name='Survived', index=X.index)
+    lgbm_predict.to_csv("lgbm_cv_predict.csv")
 
 
 if __name__ == "__main__":
