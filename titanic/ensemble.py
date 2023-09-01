@@ -12,6 +12,7 @@ from sklearn.linear_model import LogisticRegressionCV
 from sklearn.model_selection import StratifiedKFold, check_cv
 from sklearn.utils.validation import check_is_fitted
 from titanic import load_prep, model, utils
+import lightgbm as lgbm
 
 
 class StackingClassifier(BaseEstimator, ClassifierMixin):
@@ -191,7 +192,7 @@ def get_reduced_stacker():
             'randomforest': randomforest_pipe,
             'extrarandomforest': extrarandomforest_pipe,
         }, 
-        final_estimator=LogisticRegressionCV(),
+        final_estimator=lgbm.LGBMClassifier(),
         cv=cv
     )
     return stacker
