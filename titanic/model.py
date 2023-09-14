@@ -5,31 +5,37 @@ from time import time
 
 import catboost as ctb
 import lightgbm as lgbm
-import numpy as np
 import pandas as pd
-import scipy
 import sklearn.metrics as skm
 import xgboost as xgb
 from optuna.distributions import FloatDistribution
 from optuna.integration.sklearn import OptunaSearchCV
-from sklearn.base import (BaseEstimator, ClassifierMixin, TransformerMixin,
-                          clone, is_classifier)
+from sklearn.base import (
+    BaseEstimator,
+    ClassifierMixin,
+    clone,
+    is_classifier,
+)
 from sklearn.compose import make_column_selector, make_column_transformer
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.experimental import enable_iterative_imputer
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.impute import IterativeImputer, SimpleImputer
+
 # estimators
 from sklearn.linear_model import BayesianRidge, LogisticRegressionCV
+
 # model selection
 from sklearn.model_selection import StratifiedKFold, check_cv
 from sklearn.naive_bayes import GaussianNB
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline, make_pipeline
-from sklearn.preprocessing import (FunctionTransformer, OneHotEncoder,
-                                   OrdinalEncoder, StandardScaler)
+from sklearn.preprocessing import (
+    OneHotEncoder,
+    OrdinalEncoder,
+)
 from sklearn.svm import NuSVC
 from sklearn.utils.metaestimators import _safe_split
+
 from titanic import load_prep
 
 
@@ -244,7 +250,7 @@ def get_classifier(strategy="xgboost", params=None):
         }
         params = erf_params | params
         clf = LGBMProxy(**params)
-    elif strategy == 'neuralnet':
+    elif strategy == "neuralnet":
         # MLP with wrapped hyperparam search
         param_distributions = {
             # sampled params
@@ -255,21 +261,21 @@ def get_classifier(strategy="xgboost", params=None):
             MLPClassifier(**params),
             param_distributions,
             cv=5,
-            scoring='neg_log_loss', 
-            n_trials=50
+            scoring="neg_log_loss",
+            n_trials=50,
         )
     elif strategy == "svm":
         param_distributions = {
             # sampled params
             "nu": FloatDistribution(1e-3, 0.7),
-            "gamma": FloatDistribution(1e-3, 1e3, log=True)
+            "gamma": FloatDistribution(1e-3, 1e3, log=True),
         }
         clf = OptunaSearchCV(
             NuSVC(**params),
             param_distributions,
             cv=5,
             scoring="neg_log_loss",
-            n_trials=20
+            n_trials=20,
         )
     elif strategy == "logistic":
         clf = LogisticRegressionCV(**params)
@@ -316,7 +322,9 @@ def clf_pipeline(
 
 
 def get_imputed_df(X, y):
-    """utility function to retrieve imputed data with categoricals intact (as after preprocessing)"""
+    """Utility function to retrieve imputed data with categoricals intact
+    (as after preprocessing)
+    """
     pipe = make_pipeline(load_prep.preprocess_pipeline(), get_encoder(), get_imputer())
     X_imputed = pipe.fit_transform(X, y)
     X_pp = pipe[0].transform(X)
@@ -355,10 +363,11 @@ def fit_with_validation(
 
 
 def cv_with_validation(estimator, X, y, cv, callbacks=None):
-    """Perform cross-validation while passing validation data to the estimator in each fold
+    """Perform cross-validation while passing validation data to the estimator
+    in each fold.
 
-    estimator is fit using `fit_with_validation`, and is assumed to be a pipeline that can
-    accept a validation data parameter
+    estimator is fit using `fit_with_validation`, and is assumed to be a pipeline that
+    can accept a validation data parameter
 
     return results dictionary with one key per callback
     """

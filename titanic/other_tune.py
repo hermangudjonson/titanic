@@ -5,16 +5,12 @@ if training is expensive.
  - MLP with optuna search CV
 """
 
-import functools
-import warnings
 
 import cloudpickle
 import fire
-import lightgbm as lgbm
-import numpy as np
-import optuna
 import pandas as pd
-from sklearn.model_selection import RepeatedStratifiedKFold, StratifiedKFold
+from sklearn.model_selection import StratifiedKFold
+
 from titanic import load_prep, model, utils
 
 
@@ -31,14 +27,13 @@ def _cv_results_df(cv_results: dict):
 
 
 def mlp_cv_best(outdir=None):
-    """Fit and save MLPClassifier cross-validation
-    """
+    """Fit and save MLPClassifier cross-validation"""
     nn_params = {
         # static params
         "hidden_layer_sizes": (100, 20, 20),
         "max_iter": 1000,
         "early_stopping": True,
-        "n_iter_no_change": 50
+        "n_iter_no_change": 50,
     }
 
     raw_train_df, target_ds = load_prep.raw_train()
@@ -46,11 +41,7 @@ def mlp_cv_best(outdir=None):
 
     clf_pipe = model.clf_pipeline(clf_strategy="neuralnet", clf_params=nn_params)
     cv_results = model.cv_with_validation(
-        clf_pipe,
-        raw_train_df,
-        target_ds,
-        cv,
-        callbacks=model.common_cv_callbacks()
+        clf_pipe, raw_train_df, target_ds, cv, callbacks=model.common_cv_callbacks()
     )
     cv_results_df = _cv_results_df(cv_results)
 
