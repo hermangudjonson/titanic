@@ -5,14 +5,15 @@ from pathlib import Path
 
 import cloudpickle
 import fire
+import lightgbm as lgbm
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, ClassifierMixin, clone
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.model_selection import StratifiedKFold, check_cv
 from sklearn.utils.validation import check_is_fitted
+
 from titanic import load_prep, model, utils
-import lightgbm as lgbm
 
 
 class StackingClassifier(BaseEstimator, ClassifierMixin):
@@ -59,7 +60,12 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
         splits = cv.split(X, y)
 
         for est_indices in preloaded:
-            if not all([all(t1 == t2) and all(v1 == v2) for (t1, v1), (t2, v2) in zip(est_indices, splits)]):
+            if not all(
+                [
+                    all(t1 == t2) and all(v1 == v2)
+                    for (t1, v1), (t2, v2) in zip(est_indices, splits)
+                ]
+            ):
                 raise ValueError("CV indices from preloaded estimators do not match.")
 
         # we may also consider validating that test splits form a full partition
@@ -68,8 +74,10 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
     def _out_of_fold(self, cv_results):
         """Recombine out of fold predictions from `cv_results` for a single estimator
 
-        `cv_results` is assumed to be generated from `cv_with_validation` with common callbacks.
-        Return predict_proba predictions in original data order with first column removed
+        `cv_results` is assumed to be generated from `cv_with_validation` with common
+        callbacks.
+        Return predict_proba predictions in original data order with first column
+        removed.
         Returns a 2D numpy array
         """
         test_indices = np.concatenate(
@@ -132,7 +140,8 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
     def _transform(self, X):
         """Transform new data with first stage estimators.
 
-        For each estimator, average predict_proba from each fold estimator (stacking variant A).
+        For each estimator, average predict_proba from each fold estimator
+        (stacking variant A).
         """
         check_is_fitted(self)
 
@@ -174,26 +183,30 @@ def get_reduced_stacker():
 
     trying just gbms and random forest
     """
-    PRE_DIR = Path('/kaggle/input/pretrained') if utils.ON_KAGGLE else utils.WORKING_DIR / "data/hpo"
+    PRE_DIR = (
+        Path("/kaggle/input/pretrained")
+        if utils.ON_KAGGLE
+        else utils.WORKING_DIR / "data/hpo"
+    )
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
     # define models
-    lightgbm_pipe = str(PRE_DIR / 'lgbm_best_cv.pkl')
-    xgboost_pipe = str(PRE_DIR / 'xgb_best_cv.pkl')
-    catboost_pipe = str(PRE_DIR / 'ctb_best_cv.pkl')
-    randomforest_pipe = str(PRE_DIR / 'rf_best_cv.pkl')
-    extrarandomforest_pipe = str(PRE_DIR / 'erf_best_cv.pkl')
+    lightgbm_pipe = str(PRE_DIR / "lgbm_best_cv.pkl")
+    xgboost_pipe = str(PRE_DIR / "xgb_best_cv.pkl")
+    catboost_pipe = str(PRE_DIR / "ctb_best_cv.pkl")
+    randomforest_pipe = str(PRE_DIR / "rf_best_cv.pkl")
+    extrarandomforest_pipe = str(PRE_DIR / "erf_best_cv.pkl")
 
     stacker = StackingClassifier(
         {
-            'lightgbm': lightgbm_pipe,
-            'xgboost': xgboost_pipe,
-            'catboost': catboost_pipe,
-            'randomforest': randomforest_pipe,
-            'extrarandomforest': extrarandomforest_pipe,
-        }, 
+            "lightgbm": lightgbm_pipe,
+            "xgboost": xgboost_pipe,
+            "catboost": catboost_pipe,
+            "randomforest": randomforest_pipe,
+            "extrarandomforest": extrarandomforest_pipe,
+        },
         final_estimator=lgbm.LGBMClassifier(),
-        cv=cv
+        cv=cv,
     )
     return stacker
 
@@ -203,43 +216,47 @@ def get_full_stacker():
 
     should only need to fit svm, logistic, neighbors and naivebayes
     """
-    PRE_DIR = Path('/kaggle/input/pretrained') if utils.ON_KAGGLE else utils.WORKING_DIR / "data/hpo"
+    PRE_DIR = (
+        Path("/kaggle/input/pretrained")
+        if utils.ON_KAGGLE
+        else utils.WORKING_DIR / "data/hpo"
+    )
 
     cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=1234)
     # define models
-    lightgbm_pipe = str(PRE_DIR / 'lgbm_best_cv.pkl')
-    xgboost_pipe = str(PRE_DIR / 'xgb_best_cv.pkl')
-    catboost_pipe = str(PRE_DIR / 'ctb_best_cv.pkl')
-    randomforest_pipe = str(PRE_DIR / 'rf_best_cv.pkl')
-    extrarandomforest_pipe = str(PRE_DIR / 'erf_best_cv.pkl')
-    mlp_pipe = str(PRE_DIR / 'mlp_best_cv.pkl')
+    lightgbm_pipe = str(PRE_DIR / "lgbm_best_cv.pkl")
+    xgboost_pipe = str(PRE_DIR / "xgb_best_cv.pkl")
+    catboost_pipe = str(PRE_DIR / "ctb_best_cv.pkl")
+    randomforest_pipe = str(PRE_DIR / "rf_best_cv.pkl")
+    extrarandomforest_pipe = str(PRE_DIR / "erf_best_cv.pkl")
+    mlp_pipe = str(PRE_DIR / "mlp_best_cv.pkl")
     svm_pipe = model.clf_pipeline(
-        clf_strategy='svm', 
-        clf_params={
-            "kernel": "rbf",
-            "probability": True,
-            "class_weight": "balanced"
-        }
+        clf_strategy="svm",
+        clf_params={"kernel": "rbf", "probability": True, "class_weight": "balanced"},
     )
-    logistic_pipe = model.clf_pipeline(clf_strategy='logistic', clf_params={'max_iter':1000})
-    neighbors_pipe = model.clf_pipeline(clf_strategy='neighbors', clf_params={'n_neighbors':10})
-    naivebayes_pipe = model.clf_pipeline(clf_strategy='naivebayes')
+    logistic_pipe = model.clf_pipeline(
+        clf_strategy="logistic", clf_params={"max_iter": 1000}
+    )
+    neighbors_pipe = model.clf_pipeline(
+        clf_strategy="neighbors", clf_params={"n_neighbors": 10}
+    )
+    naivebayes_pipe = model.clf_pipeline(clf_strategy="naivebayes")
 
     stacker = StackingClassifier(
         {
-            'lightgbm': lightgbm_pipe,
-            'xgboost': xgboost_pipe,
-            'catboost': catboost_pipe,
-            'randomforest': randomforest_pipe,
-            'extrarandomforest': extrarandomforest_pipe,
-            'mlp': mlp_pipe,
-            'svm': svm_pipe,
-            'logistic': logistic_pipe, 
-            'neighbors': neighbors_pipe,
-            'naivebayes': naivebayes_pipe,
-        }, 
+            "lightgbm": lightgbm_pipe,
+            "xgboost": xgboost_pipe,
+            "catboost": catboost_pipe,
+            "randomforest": randomforest_pipe,
+            "extrarandomforest": extrarandomforest_pipe,
+            "mlp": mlp_pipe,
+            "svm": svm_pipe,
+            "logistic": logistic_pipe,
+            "neighbors": neighbors_pipe,
+            "naivebayes": naivebayes_pipe,
+        },
         final_estimator=LogisticRegressionCV(),
-        cv=cv
+        cv=cv,
     )
     return stacker
 
@@ -253,7 +270,7 @@ def get_stacker(strategy="reduced"):
 
 
 def _cvr_eval_df(cvr):
-    return pd.concat(cvr['eval_test'].values(), ignore_index=True)
+    return pd.concat(cvr["eval_test"].values(), ignore_index=True)
 
 
 def submit(strategy="reduced"):
@@ -267,17 +284,17 @@ def submit(strategy="reduced"):
 
     stacker_clf = get_stacker(strategy=strategy)
     stacker_clf.fit(X, y)
-    
+
     # record validation evals
-    evals = (
-        {
-            k: _cvr_eval_df(stacker_clf.estimators_[k]).mean()
-            for k in stacker_clf.estimators_.keys()
-        }
-    )
+    evals = {
+        k: _cvr_eval_df(stacker_clf.estimators_[k]).mean()
+        for k in stacker_clf.estimators_.keys()
+    }
     pd.concat(evals, axis=1).to_csv("stacker_estimators_evals.csv")
 
-    stacker_predict = pd.Series(stacker_clf.predict(X_test), name='Survived', index=X_test.index)
+    stacker_predict = pd.Series(
+        stacker_clf.predict(X_test), name="Survived", index=X_test.index
+    )
     stacker_predict.to_csv("stacker_predict.csv")
 
 
