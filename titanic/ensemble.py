@@ -32,7 +32,7 @@ class StackingClassifier(BaseEstimator, ClassifierMixin):
         self.passthrough = passthrough
 
     def _load_estimators(self):
-        """Load pickled pre-fit estimators (otherwise None)"""
+        """Load pickled pre-fit estimators (otherwise None)."""
         est_dict = {}
         for name, est in self.estimators.items():
             if isinstance(est, str):
