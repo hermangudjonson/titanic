@@ -205,7 +205,29 @@ def transform_sibsp_parch(df):
     return df
 
 
-def transform_fare(df):
+def transform_fare(df: pd.DataFrame):
+    """Log transform fare values (and map 0 values to NA)
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        with "Fare" column containing float values
+
+    Returns
+    -------
+    df : pd.DataFrame
+        original dataframe with "Fare" column transformed
+
+    Examples
+    --------
+    >>> import pandas as pd
+    >>> df = pd.DataFrame({'Fare': [0.0, 1.0, 2.0]})
+    >>> transform_fare(df)
+           Fare
+    0       NaN
+    1  1.000000
+    2  1.584963
+    """
     # map 0 values to NA
     df = df.replace({"Fare": 0.0}, np.nan)
     # log transform
