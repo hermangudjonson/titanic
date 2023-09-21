@@ -18,6 +18,7 @@ from sklearn.base import (
 )
 from sklearn.compose import make_column_selector, make_column_transformer
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.experimental import enable_iterative_imputer  # noqa: F401
 from sklearn.impute import IterativeImputer, SimpleImputer
 
 # estimators
