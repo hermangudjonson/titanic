@@ -26,7 +26,7 @@ def raw_train(input_dir: Path | str = INPUT_DIR):
     target_ds: `pd.Series`
         891 Survived (binary 0/1)
     """
-    logger.info('loading raw train data')
+    logger.info("loading raw train data")
     input_dir = Path(input_dir) if isinstance(input_dir, str) else input_dir
 
     train_df = pd.read_csv(input_dir / "train.csv", index_col="PassengerId")
