@@ -1,0 +1,40 @@
+name: ml_v0_titanic
+channels:
+  - conda-forge
+  - pytorch
+dependencies:
+  - python =3.10
+  - matplotlib
+  - seaborn
+  - jupyterlab
+  - notebook
+  - pytorch
+  - pyro-ppl
+  - torchvision
+  - torchaudio
+  - python-wget
+  - pandas-datareader
+  - scikit-learn >=1.2
+  - pandas-profiling =3.4
+  - py-xgboost
+  - lightgbm
+  - catboost =1.1
+  - optuna
+  - optuna-dashboard
+  - shap
+  - black
+  - flit
+  - kaggle
+  - fire
+  - cloudpickle
+  - sphinx
+  - sphinx-autoapi
+  - sphinx-autobuild
+  - sphinx-rtd-theme
+  - pytest
+  - pytest-cov
+  - loguru
+  - pip
+  - pip:
+    - sweetviz
+    - -e /Users/herman/Dropbox/ml_practice/classic_ml/titanic/titanic
